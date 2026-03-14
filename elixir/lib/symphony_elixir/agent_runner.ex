@@ -5,7 +5,7 @@ defmodule SymphonyElixir.AgentRunner do
 
   require Logger
   alias SymphonyElixir.Codex.AppServer
-  alias SymphonyElixir.{Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
+  alias SymphonyElixir.{AssetCache, AssetCollector, Config, Linear.Issue, PromptBuilder, Tracker, Workspace}
 
   @type worker_host :: String.t() | nil
 
@@ -106,14 +106,17 @@ defmodule SymphonyElixir.AgentRunner do
   end
 
   defp do_run_codex_turns(app_session, workspace, issue, codex_update_recipient, opts, issue_state_fetcher, turn_number, max_turns) do
-    prompt = build_turn_prompt(issue, opts, turn_number, max_turns)
+    # Collect and cache visual assets on the first turn
+    cached_assets = collect_visual_assets(issue, workspace, turn_number)
+    prompt = build_turn_prompt(issue, Keyword.put(opts, :assets, cached_assets), turn_number, max_turns)
 
     with {:ok, turn_session} <-
            AppServer.run_turn(
              app_session,
              prompt,
              issue,
-             on_message: codex_message_handler(codex_update_recipient, issue)
+             on_message: codex_message_handler(codex_update_recipient, issue),
+             assets: cached_assets
            ) do
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
@@ -225,4 +228,19 @@ defmodule SymphonyElixir.AgentRunner do
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
+
+  # Collect and cache visual assets on the first turn only.
+  # Subsequent turns reuse the cached assets already in the workspace.
+  defp collect_visual_assets(issue, workspace, 1) do
+    with {:ok, collected} <- AssetCollector.collect_assets(issue, workspace),
+         {:ok, cached} <- AssetCache.cache_assets(collected, workspace) do
+      cached
+    else
+      {:error, reason} ->
+        Logger.warning("Failed to collect visual assets for #{issue_context(issue)}: #{inspect(reason)}")
+        []
+    end
+  end
+
+  defp collect_visual_assets(_issue, _workspace, _turn_number), do: []
 end

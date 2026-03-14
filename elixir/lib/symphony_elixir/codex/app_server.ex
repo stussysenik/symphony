@@ -83,12 +83,14 @@ defmodule SymphonyElixir.Codex.AppServer do
       ) do
     on_message = Keyword.get(opts, :on_message, &default_on_message/1)
 
+    assets = Keyword.get(opts, :assets, [])
+
     tool_executor =
       Keyword.get(opts, :tool_executor, fn tool, arguments ->
         DynamicTool.execute(tool, arguments)
       end)
 
-    case start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy) do
+    case start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy, assets) do
       {:ok, turn_id} ->
         session_id = "#{thread_id}-#{turn_id}"
         Logger.info("Codex session started for #{issue_context(issue)} session_id=#{session_id}")
@@ -301,18 +303,13 @@ defmodule SymphonyElixir.Codex.AppServer do
     end
   end
 
-  defp start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy) do
+  defp start_turn(port, thread_id, prompt, issue, workspace, approval_policy, turn_sandbox_policy, assets \\ []) do
     send_message(port, %{
       "method" => "turn/start",
       "id" => @turn_start_id,
       "params" => %{
         "threadId" => thread_id,
-        "input" => [
-          %{
-            "type" => "text",
-            "text" => prompt
-          }
-        ],
+        "input" => build_multimodal_input(prompt, assets),
         "cwd" => workspace,
         "title" => "#{issue.identifier}: #{issue.title}",
         "approvalPolicy" => approval_policy,
@@ -324,6 +321,24 @@ defmodule SymphonyElixir.Codex.AppServer do
       {:ok, %{"turn" => %{"id" => turn_id}}} -> {:ok, turn_id}
       other -> other
     end
+  end
+
+  # Build multimodal input array for Codex. When assets are provided, the input
+  # includes both text and image blocks so the agent can SEE mockups and designs.
+  defp build_multimodal_input(prompt, []), do: [%{"type" => "text", "text" => prompt}]
+
+  defp build_multimodal_input(prompt, assets) when is_list(assets) do
+    image_blocks =
+      assets
+      |> Enum.filter(&Map.has_key?(&1, :local_path))
+      |> Enum.map(fn asset ->
+        %{
+          "type" => "image",
+          "image_url" => asset.local_path || asset[:url]
+        }
+      end)
+
+    [%{"type" => "text", "text" => prompt}] ++ image_blocks
   end
 
   defp await_turn_completion(port, on_message, tool_executor, auto_approve_requests) do

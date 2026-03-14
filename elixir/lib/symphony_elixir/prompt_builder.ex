@@ -9,6 +9,8 @@ defmodule SymphonyElixir.PromptBuilder do
 
   @spec build_prompt(SymphonyElixir.Linear.Issue.t(), keyword()) :: String.t()
   def build_prompt(issue, opts \\ []) do
+    assets = Keyword.get(opts, :assets, [])
+
     template =
       Workflow.current()
       |> prompt_template!()
@@ -18,7 +20,10 @@ defmodule SymphonyElixir.PromptBuilder do
     |> Solid.render!(
       %{
         "attempt" => Keyword.get(opts, :attempt),
-        "issue" => issue |> Map.from_struct() |> to_solid_map()
+        "issue" => issue |> Map.from_struct() |> to_solid_map(),
+        "has_visual_assets" => length(assets) > 0,
+        "visual_assets" => Enum.map(assets, &to_solid_map/1),
+        "visual_asset_count" => length(assets)
       },
       @render_opts
     )

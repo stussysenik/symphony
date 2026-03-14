@@ -18,6 +18,25 @@ defmodule SymphonyElixir.Config do
   {% else %}
   No description provided.
   {% endif %}
+
+  {% if has_visual_assets %}
+
+  ## Visual Context
+
+  You have {{ visual_asset_count }} visual asset(s) attached to this issue.
+  IMPORTANT: Before writing ANY code, analyze each image carefully:
+
+  1. **Identify the UI elements** — What components, layouts, and patterns do you see?
+  2. **Note the visual details** — Colors, spacing, typography, icons, borders
+  3. **Map to implementation** — Which framework components match what you see?
+  4. **Check your work** — After implementing, mentally compare your code output to the mockup
+
+  {% for asset in visual_assets %}
+  - {{ asset.title }} ({{ asset.source }})
+  {% endfor %}
+
+  Do NOT ignore the visual assets. Your implementation MUST match the provided mockups.
+  {% endif %}
   """
 
   @type codex_runtime_settings :: %{

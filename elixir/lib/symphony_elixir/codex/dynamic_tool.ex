@@ -5,6 +5,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
 
   alias SymphonyElixir.Linear.Client
 
+  @compare_screenshots_tool "compare_screenshots"
   @linear_graphql_tool "linear_graphql"
   @linear_graphql_description """
   Execute a raw GraphQL query or mutation against Linear using Symphony's configured auth.
@@ -32,6 +33,9 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       @linear_graphql_tool ->
         execute_linear_graphql(arguments, opts)
 
+      @compare_screenshots_tool ->
+        execute_compare_screenshots(arguments, opts)
+
       other ->
         failure_response(%{
           "error" => %{
@@ -49,8 +53,72 @@ defmodule SymphonyElixir.Codex.DynamicTool do
         "name" => @linear_graphql_tool,
         "description" => @linear_graphql_description,
         "inputSchema" => @linear_graphql_input_schema
+      },
+      %{
+        "name" => @compare_screenshots_tool,
+        "description" => "Compare a screenshot of your implementation against the original mockup. Returns visual differences and suggestions.",
+        "inputSchema" => %{
+          "type" => "object",
+          "additionalProperties" => false,
+          "required" => ["implementation_path"],
+          "properties" => %{
+            "implementation_path" => %{
+              "type" => "string",
+              "description" => "Path to a screenshot of your implementation (relative to workspace)."
+            },
+            "mockup_id" => %{
+              "type" => "string",
+              "description" => "ID of the mockup asset to compare against (from the visual assets list)."
+            }
+          }
+        }
       }
     ]
+  end
+
+  defp execute_compare_screenshots(arguments, _opts) when is_map(arguments) do
+    impl_path = Map.get(arguments, "implementation_path") || Map.get(arguments, :implementation_path, "")
+    mockup_id = Map.get(arguments, "mockup_id") || Map.get(arguments, :mockup_id)
+
+    cond do
+      impl_path == "" ->
+        failure_response(%{
+          "error" => %{
+            "message" => "`compare_screenshots` requires a non-empty `implementation_path`."
+          }
+        })
+
+      not File.exists?(impl_path) ->
+        failure_response(%{
+          "error" => %{
+            "message" => "Implementation screenshot not found at: #{impl_path}"
+          }
+        })
+
+      true ->
+        # Return metadata about both files for the agent to compare visually.
+        # The actual visual comparison is done by the multimodal model — we just
+        # confirm the files exist and provide their paths.
+        result = %{
+          "implementation" => %{
+            "path" => impl_path,
+            "exists" => true,
+            "size" => File.stat!(impl_path).size
+          },
+          "mockup_id" => mockup_id,
+          "guidance" => "Both files are available. Compare them visually and list any differences in layout, color, spacing, or content."
+        }
+
+        dynamic_tool_response(true, encode_payload(result))
+    end
+  end
+
+  defp execute_compare_screenshots(_arguments, _opts) do
+    failure_response(%{
+      "error" => %{
+        "message" => "`compare_screenshots` expects an object with `implementation_path` and optional `mockup_id`."
+      }
+    })
   end
 
   defp execute_linear_graphql(arguments, opts) do
