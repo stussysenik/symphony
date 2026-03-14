@@ -3,6 +3,13 @@ defmodule SymphonyElixir.Linear.Issue do
   Normalized Linear issue representation used by the orchestrator.
   """
 
+  @type attachment :: %{
+          id: String.t(),
+          title: String.t() | nil,
+          url: String.t(),
+          metadata: map() | nil
+        }
+
   defstruct [
     :id,
     :identifier,
@@ -15,6 +22,7 @@ defmodule SymphonyElixir.Linear.Issue do
     :assignee_id,
     blocked_by: [],
     labels: [],
+    attachments: [],
     assigned_to_worker: true,
     created_at: nil,
     updated_at: nil
@@ -31,6 +39,7 @@ defmodule SymphonyElixir.Linear.Issue do
           url: String.t() | nil,
           assignee_id: String.t() | nil,
           labels: [String.t()],
+          attachments: [attachment()],
           assigned_to_worker: boolean(),
           created_at: DateTime.t() | nil,
           updated_at: DateTime.t() | nil

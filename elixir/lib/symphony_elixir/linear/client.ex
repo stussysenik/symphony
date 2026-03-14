@@ -43,6 +43,14 @@ defmodule SymphonyElixir.Linear.Client do
             }
           }
         }
+        attachments {
+          nodes {
+            id
+            title
+            url
+            metadata
+          }
+        }
         createdAt
         updatedAt
       }
@@ -86,6 +94,14 @@ defmodule SymphonyElixir.Linear.Client do
                 name
               }
             }
+          }
+        }
+        attachments {
+          nodes {
+            id
+            title
+            url
+            metadata
           }
         }
         createdAt
@@ -460,6 +476,7 @@ defmodule SymphonyElixir.Linear.Client do
       assignee_id: assignee_field(assignee, "id"),
       blocked_by: extract_blockers(issue),
       labels: extract_labels(issue),
+      attachments: extract_attachments(issue),
       assigned_to_worker: assigned_to_worker?(assignee, assignee_filter),
       created_at: parse_datetime(issue["createdAt"]),
       updated_at: parse_datetime(issue["updatedAt"])
@@ -537,6 +554,19 @@ defmodule SymphonyElixir.Linear.Client do
   end
 
   defp normalize_assignee_match_value(_value), do: nil
+
+  defp extract_attachments(%{"attachments" => %{"nodes" => attachments}}) when is_list(attachments) do
+    Enum.map(attachments, fn attachment ->
+      %{
+        id: attachment["id"],
+        title: attachment["title"],
+        url: attachment["url"],
+        metadata: attachment["metadata"]
+      }
+    end)
+  end
+
+  defp extract_attachments(_), do: []
 
   defp extract_labels(%{"labels" => %{"nodes" => labels}}) when is_list(labels) do
     labels
