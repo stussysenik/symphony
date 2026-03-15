@@ -110,6 +110,9 @@ defmodule SymphonyElixir.AgentRunner do
     cached_assets = collect_visual_assets(issue, workspace, turn_number)
     prompt = build_turn_prompt(issue, Keyword.put(opts, :assets, cached_assets), turn_number, max_turns)
 
+    log_ingestion_summary(issue, prompt, cached_assets, workspace, turn_number, max_turns)
+    turn_started_at = System.monotonic_time(:millisecond)
+
     with {:ok, turn_session} <-
            AppServer.run_turn(
              app_session,
@@ -118,6 +121,7 @@ defmodule SymphonyElixir.AgentRunner do
              on_message: codex_message_handler(codex_update_recipient, issue),
              assets: cached_assets
            ) do
+      log_turn_completion(issue, turn_session, workspace, turn_number, max_turns, turn_started_at)
       Logger.info("Completed agent run for #{issue_context(issue)} session_id=#{turn_session[:session_id]} workspace=#{workspace} turn=#{turn_number}/#{max_turns}")
 
       case continue_with_issue?(issue, issue_state_fetcher) do
@@ -228,6 +232,75 @@ defmodule SymphonyElixir.AgentRunner do
   defp issue_context(%Issue{id: issue_id, identifier: identifier}) do
     "issue_id=#{issue_id} issue_identifier=#{identifier}"
   end
+
+  # Log a summary of what the agent is about to ingest before each turn.
+  defp log_ingestion_summary(issue, prompt, assets, workspace, turn_number, max_turns) do
+    prompt_preview = String.slice(prompt, 0, 2000)
+    prompt_hash = :crypto.hash(:sha256, prompt) |> Base.encode16(case: :lower) |> String.slice(0, 12)
+    prompt_len = String.length(prompt)
+
+    asset_manifest =
+      assets
+      |> Enum.map(fn asset ->
+        name = Map.get(asset, :filename) || Map.get(asset, "filename") || "unknown"
+        size = Map.get(asset, :size) || Map.get(asset, "size") || "?"
+        type = Map.get(asset, :content_type) || Map.get(asset, "content_type") || "?"
+        "#{name} (#{size} bytes, #{type})"
+      end)
+      |> Enum.join(", ")
+
+    workspace_status = workspace_git_status(workspace)
+
+    Logger.info("""
+    [ingestion_summary] #{issue_context(issue)} turn=#{turn_number}/#{max_turns}
+      prompt_length=#{prompt_len} prompt_hash=#{prompt_hash}
+      prompt_preview=#{prompt_preview}
+      visual_assets=#{length(assets)} [#{asset_manifest}]
+      workspace_status=#{workspace_status}
+    """)
+  end
+
+  # Log a summary after each turn completes.
+  defp log_turn_completion(issue, turn_session, workspace, turn_number, max_turns, turn_started_at) do
+    duration_ms = System.monotonic_time(:millisecond) - turn_started_at
+    session_id = turn_session[:session_id] || "n/a"
+    modified_files = workspace_modified_files(workspace)
+
+    Logger.info("""
+    [turn_summary] #{issue_context(issue)} turn=#{turn_number}/#{max_turns}
+      session_id=#{session_id} duration_ms=#{duration_ms}
+      modified_files=#{modified_files}
+    """)
+  end
+
+  defp workspace_git_status(workspace) when is_binary(workspace) do
+    case System.cmd("git", ["status", "--short"], cd: workspace, stderr_to_stdout: true) do
+      {output, 0} ->
+        output |> String.trim() |> String.replace("\n", "; ")
+
+      {_, _} ->
+        "unavailable"
+    end
+  rescue
+    _ -> "unavailable"
+  end
+
+  defp workspace_git_status(_workspace), do: "unavailable"
+
+  defp workspace_modified_files(workspace) when is_binary(workspace) do
+    case System.cmd("git", ["diff", "--name-only", "HEAD"], cd: workspace, stderr_to_stdout: true) do
+      {output, 0} ->
+        files = output |> String.trim()
+        if files == "", do: "(none)", else: String.replace(files, "\n", ", ")
+
+      {_, _} ->
+        "unavailable"
+    end
+  rescue
+    _ -> "unavailable"
+  end
+
+  defp workspace_modified_files(_workspace), do: "unavailable"
 
   # Collect and cache visual assets on the first turn only.
   # Subsequent turns reuse the cached assets already in the workspace.

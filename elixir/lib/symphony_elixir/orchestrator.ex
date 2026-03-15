@@ -191,6 +191,22 @@ defmodule SymphonyElixir.Orchestrator do
       running_entry ->
         {updated_running_entry, token_delta} = integrate_codex_update(running_entry, update)
 
+        SymphonyElixir.EventLog.append(
+          running_entry.identifier,
+          update.event,
+          summarize_codex_update(update),
+          update.timestamp,
+          %{
+            token_delta: %{
+              input: token_delta.input_tokens,
+              output: token_delta.output_tokens,
+              total: token_delta.total_tokens
+            },
+            turn_number: Map.get(updated_running_entry, :turn_count, 0),
+            session_id: Map.get(updated_running_entry, :session_id)
+          }
+        )
+
         state =
           state
           |> apply_codex_token_delta(token_delta)

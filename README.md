@@ -36,6 +36,17 @@ help with the setup:
 
 ---
 
+## Fork: stussysenik/symphony
+
+This fork adds:
+- Phoenix dashboard with live event stream and per-issue detail views
+- Visual assets pipeline (Linear attachments → multimodal Codex prompts)
+- Ingestion summary logging and EventLog metadata (token deltas in dashboard)
+
+Operator interface and workflow configs: **[symphony-hub](https://github.com/stussysenik/symphony-hub)**
+
+---
+
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
