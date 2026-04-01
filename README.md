@@ -1,5 +1,8 @@
 # Symphony
 
+![Demo](demo.gif)
+
+
 Symphony is an autonomous agent orchestration service by OpenAI. It polls Linear for issues, creates isolated workspaces, and runs Codex coding agents to implement the work end-to-end. You manage tickets — Symphony manages agents.
 
 [![Symphony demo video preview](.github/media/symphony-demo-poster.jpg)](.github/media/symphony-demo.mp4)
